@@ -1,0 +1,69 @@
+<div class="answerQuestion-layout container">
+  <div class="question-section">
+    <div class="question-container">
+      <div class="question-content">
+        <div class="title" ng-bind-html="title | wizMarkdownFltr"></div>
+        <wiz-markdown content="body"></wiz-markdown>
+        <button ng-hide="isSubscribed" class="subscribe-button action-button" ng-click="subscribeToQuestion()">Subscribe to Question</button>
+        <span class="subscribed-label" ng-show="isSubscribed">Subscribed!</span>
+        <div class="timestamp"  ng-bind="timestamp | date:'medium'"></div>
+        <div class="tags">
+          <span class="tag" ng-repeat="tag in tags">{{tag.text}}</span>
+        </div>
+        <div so-comments="comments" so-comments-add="submitQuestionComment"></div>
+        <div class="answer-count">{{answers.length}} Answers</div>
+      </div>
+      <div class="user-info">
+        <div>
+          <a ng-href="/#/profile/{{author.username}}">
+            <img ng-src="/api/files/avatar/{{author.username}}" />
+          </a>
+        </div>
+        <a class="profile-link" ng-href="/#/profile/{{author.username}}">
+          <span>{{author.name}}</span>
+        </a>
+        <div class="author-karma">{{author.karma}}</div>
+      </div>
+    </div>
+    <div class="answers-container">
+      <div ng-repeat="answer in answers"
+       so-answer="answer"
+       so-answer-question-id="questionId"
+       so-answer-is-own-question="isOwnQuestion"
+       so-answer-on-update="loadQuestion"></div>
+    </div>
+  </div>
+  <div class="answer-section">
+    <form novalidate class="answer-question-form" name="answerQuestionForm" ng-submit="submitAnswer()">
+      <div>
+        <wiz-markdown-editor content="answer">
+        <wiz-toolbar-button command="bold" class="markdown-button"><i class="fa fa-bold"></i> Bold</wiz-toolbar-button>
+        <wiz-toolbar-button command="italic" class="markdown-button"><i class="fa fa-italic"></i> Italic</wiz-toolbar-button>
+        <wiz-toolbar-button command="heading" class="markdown-button"><i class="fa fa-header"></i> Heading</wiz-toolbar-button>
+        <wiz-toolbar-button command="code" class="markdown-button"><i class="fa fa-code"></i> Code</wiz-toolbar-button>
+        <wiz-toolbar-button command="ullist" class="markdown-button"><i class="fa fa-list"></i> UList</wiz-toolbar-button>
+        <wiz-toolbar-button command="ollist" class="markdown-button"><i class="fa fa-list-ol"></i> OList</wiz-toolbar-button>
+        <wiz-toolbar-button command="link" class="markdown-button"><i class="fa fa-link"></i> Link</wiz-toolbar-button>
+        <wiz-toolbar-button command="img" class="markdown-button"><i class="fa fa-picture-o"></i> Img</wiz-toolbar-button>
+      </wiz-markdown-editor>
+    </div>
+    <wiz-markdown content="answer" class="markdown-output"></wiz-markdown>
+    <input type="text" name="answer" ng-model="answer" class="hidden" required minlength="30" maxlength=10000/>
+    <div class="validation-messages" ng-show="!answerQuestionForm.$valid && answerQuestionForm.$submitted">
+        <ng-messages for="answerQuestionForm.answer.$error">
+          <ng-message when="required">
+            <p>Please enter answer</p>
+          </ng-message>
+          <ng-message when="minlength">
+            <p>Answer is too short</p>
+          </ng-message>
+          <ng-message when="maxlength">
+            <p>Answer is too long</p>
+          </ng-message>
+        </ng-messages>
+      </div>
+    <button class="form-submit action-button" type="submit">Post your answer</button>
+  </form>
+</div>
+
+</div>

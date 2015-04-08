@@ -37,3 +37,6 @@ build
 dist
 data
 serverTests/specs/.compiled
+docs
+apidocs
+clientdocs

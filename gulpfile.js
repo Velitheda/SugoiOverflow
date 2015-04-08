@@ -29,8 +29,12 @@ var gzip =               require('gulp-gzip');
 var args =               require('yargs').argv;
 var coffee =             require('gulp-coffee');
 var mocha =              require('gulp-mocha');
-
-
+var templateCache =      require('gulp-angular-templatecache');
+var karma =              require('karma').server;
+var apidoc =             require('gulp-apidoc');
+var order =              require('gulp-order');
+var Dgeni =              require('dgeni');
+var shell = require('gulp-shell');
 var envType = process.env.NODE_ENV ||args.NODE_ENV || args.env || 'development';
 var isDev = envType === 'development';
 
@@ -38,10 +42,11 @@ var paths = {
   scripts        : ['client/scripts/**/*.js'],
   css            : [],
   styles         : ['client/styles/**/*.scss'],
-  html           : ['client/views/**/*.html'],
+  html           : ['client/**/*.html'],
   index          : ['client/index.html'],
   bowerScripts   : mainBowerFiles({filter:/.*\.js$/i}),
   bowerStyles    : mainBowerFiles({filter:/.*\.css$/i}),
+  bowerFonts     : mainBowerFiles({filter:/.*\.(eot|ttf|woff|woff2|otf)$/i})
 };
 
 gulp.task('lint', function() {
@@ -52,7 +57,7 @@ gulp.task('lint', function() {
 });
 
 gulp.task('clean', function(){
-  return gulp.src(['build', 'dist', './serverTests/specs/.compiled'])
+  return gulp.src(['build', 'dist', './serverTests/specs/.compiled', 'clientdocs', 'apidocs'])
     .pipe(rimraf());
 });
 
@@ -60,6 +65,11 @@ gulp.task('scripts-lib', function(){
   return gulp.src(paths.bowerScripts,{
     base: 'bower_components'
   })
+  .pipe(order(['**/jquery.js',
+    '**/angular.js',
+    '**/bootstrap.js',
+    '**/lodash.js',
+    '**/*.js']))
   .pipe(isDev ? gutil.noop() : concat('lib.js'))
   .pipe(isDev ? gutil.noop() : uglify())
   .pipe(gulp.dest('build/scripts/lib'));
@@ -82,7 +92,7 @@ gulp.task('scripts-app', /*['lint-scripts'],*/ function(){
 
 gulp.task('styles-lib', /*['lint-styles'],*/ function(){
   return gulp.src(paths.bowerStyles)
-    .pipe(isDev ? gutil.noop() : concatCss('lib.css'))
+    .pipe(isDev ? gutil.noop() : concatCss('lib.css', { rebaseUrls: false }))
     .pipe(isDev ? gutil.noop() : minifyCss())
     .pipe(gulp.dest('build/styles/lib'))
     .pipe(livereload());
@@ -90,22 +100,32 @@ gulp.task('styles-lib', /*['lint-styles'],*/ function(){
 
 gulp.task('styles-app', function(){
   return gulp.src(paths.styles)
-    //.pipe(isDev ? gulp.dest('build'): gutil.noop())
     .pipe(isDev ? sourcemaps.init() : gutil.noop())
     .pipe(sass())
-    .pipe(isDev ? gutil.noop() : concatCss('app.css'))
+    .pipe(isDev ? gutil.noop() : concatCss('app.css', { rebaseUrls: false }))
     .pipe(isDev ? gutil.noop() : minifyCss())
     .pipe(isDev ? sourcemaps.write('./') : gutil.noop())
     .pipe(gulp.dest('build/styles/app'))
     .pipe(livereload());
 });
 
+gulp.task('fonts', function(){
+  return gulp.src(paths.bowerFonts)
+    .pipe(gulp.dest('build/styles/fonts'));
+});
 
 gulp.task('templates', function(){
+  gulp.src(paths.html)
+    .pipe(templateCache({standalone: true, module:'sugoiOverflow.templates'}))
+    .pipe(gulp.dest('build/scripts/app'));
+});
+
+gulp.task('inject-index', ['scripts-lib', 'scripts-app', 'styles-lib', 'styles-app', 'templates', 'fonts'], function(){
   var cwd = path.resolve(__dirname, './build');
   var scriptsLib = gulp.src(['scripts/lib/**/jquery.js',
                               'scripts/lib/**/angular.js',
                               'scripts/lib/**/bootstrap.js',
+                              'scripts/lib/**/lodash.js',
                               'scripts/lib/**/*.js'],{ cwd: cwd });
 
   var scriptsApp = gulp.src(['scripts/app/**/*.js'],{ cwd: cwd })
@@ -114,23 +134,17 @@ gulp.task('templates', function(){
   var stylesLib = gulp.src(['styles/lib/**/*.css'],{ cwd: cwd });
   var stylesApp = gulp.src(['styles/app/**/*.css'],{ cwd: cwd });
 
-  var index = gulp.src(paths.index, {base: 'client'})
-          .pipe(inject(scriptsLib, {name: 'lib'}))
-          .pipe(inject(scriptsApp, {name: 'app'}))
-          .pipe(inject(stylesLib, {name: 'lib'}))
-          .pipe(inject(stylesApp, {name: 'app'}))
-          .pipe(gulp.dest('build'));
-
-  var html = gulp.src(paths.html, {base: 'client'})
-          .pipe(gulp.dest('build'));
-
-  return eventStream.merge(index, html);
+  return gulp.src(paths.index, {base: 'client'})
+    .pipe(inject(scriptsLib, {name: 'lib'}))
+    .pipe(inject(scriptsApp, {name: 'app'}))
+    .pipe(inject(stylesLib, {name: 'lib'}))
+    .pipe(inject(stylesApp, {name: 'app'}))
+    .pipe(gulp.dest('build'));
 });
 
 gulp.task('build', function(done){
   runSequence('clean',
-              ['scripts-lib', 'scripts-app', 'styles-lib', 'styles-app'],
-              'templates',
+              'inject-index',
               done);
 });
 
@@ -227,14 +241,52 @@ gulp.task('pack', ['clean', 'build'], function () {
     .pipe(gulp.dest('./dist'));
 });
 
-gulp.task('test-server', ['clean'], function(){
+gulp.task('test-server', function(){
   var reporter = process.env.CI ? 'spec' : 'nyan';
-  gulp.src('./serverTests/specs/**/*.coffee')
-    .pipe(sourcemaps.init())
-    .pipe(coffee({bare: true}).on('error', gutil.log))
-    .pipe(sourcemaps.write())
-    .pipe(gulp.dest('./serverTests/specs/.compiled'))
+  return gulp.src('./serverTests/specs/**/*.spec.coffee')
     .pipe(mocha({reporter: reporter}));
 });
+
+gulp.task('test-client', function(done) {
+  var reporter = process.env.CI ? 'spec' : 'nyan';
+  karma.start({
+    configFile: __dirname + '/karma.conf.coffee',
+    singleRun: true,
+    action: 'run',
+    reporters: [reporter]
+  }, done);
+});
+
+gulp.task('test', ['test-server', 'test-client']);
+
+gulp.task('apidocs', function(){
+          apidoc.exec({
+            src: 'server/',
+            dest: 'apidocs/'
+          });
+});
+
+gulp.task('dgeni', function(){
+  var dgeni = new Dgeni([require('./dgeniConf')]);
+  return dgeni.generate();
+});
+
+// gulp.task('clientdocs', function(){
+//   var conf = require('angular-jsdoc/conf.json');
+//   var template = {
+//     path: 'node_modules/angular-jsdoc/template',
+//   };
+
+//   return gulp.src('./client/**/*.js')
+//     .pipe(jsdoc.generator('./clientdocs/', template, conf));
+// });
+
+gulp.task('clientdocs', shell.task([
+ 'node_modules/jsdoc/jsdoc.js '+
+   '-c node_modules/angular-jsdoc/conf.json '+   // config file
+   '-t node_modules/angular-jsdoc/template '+    // template file
+   '-d clientdocs '+                             // output directory
+   '-r client'                              // source code directory
+]));
 
 gulp.task('default', ['run']);

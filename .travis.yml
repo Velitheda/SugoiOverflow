@@ -2,15 +2,15 @@ language: node_js
 node_js:
   - "0.12"
   - "0.10"
+  - "iojs"
 env:
   - NODE_ENV=production
 before_install:
-  - npm install --production=false
   - npm install -g bower
-  - bower install
   - npm install -g gulp
-before_script: gulp test-server
-script: gulp pack
+install: npm install --production=false
+script: gulp test
+after_success: gulp pack
 addons:
   artifacts:
     paths:

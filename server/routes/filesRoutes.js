@@ -18,7 +18,7 @@ var Q = require('q');
 
 var gfs = new Grid(mongoose.connection.db, mongoose.mongo);
 
-router.post('/avatar', passport.authenticate('jwt', { session: false}), function(req, res){
+router.post('/avatar', passport.authenticate('jwt', { session: false}), function(req, res, next){
   var busboy = new Busboy({ headers: req.headers });
   busboy.on('file', function(fieldname, file/*, filename, encoding, mimetype*/) {
     var writestream = gfs.createWriteStream({
@@ -37,15 +37,22 @@ router.post('/avatar', passport.authenticate('jwt', { session: false}), function
       .stream()
       .pipe(writestream);
   });
+
   busboy.on('finish', function() {
     res
       .status(200)
       .send();
   });
+
+  busboy.on('error', function(error) {
+    logger.error('Error uploading avatar', error);
+    return next(error);
+  });
+
   return req.pipe(busboy);
 });
 
-router.get('/avatar/:username', function(req, res){
+router.get('/avatar/:username', function(req, res, next){
   domain.User.findOneQ({username: req.params.username})
     .then(function(user){
       var opts = {
@@ -68,6 +75,7 @@ router.get('/avatar/:username', function(req, res){
         })
         .catch(function(error){
           logger.error('Error getting avatar', error);
+          return next(error);
         });
     });
 

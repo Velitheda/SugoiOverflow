@@ -7,7 +7,7 @@ var router  = express.Router();
 var logger      = require('../logger');
 
 
-router.get('/top', function(req, res){
+router.get('/top', function(req, res, next){
 
   var mapReduceOptions = {
     /* jshint ignore:start */
@@ -46,9 +46,7 @@ router.get('/top', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting top tags', error);
-      res
-        .status(500)
-        .send(error.message);
+      return next(error);
     });
 });
 

@@ -5,14 +5,50 @@ var logger      = require('../logger');
 
 var _           = require('lodash');
 var express     = require('express');
-
+var validate    = require('express-jsonschema').validate;
 var router      = express.Router();
+var schemas     = require('./schemas');
 
 
 /**
- * Get all questions
+ * @apiDefine QuestionSuccess
+ * @apiSuccess {string}     id                                     Id of a question
+ * @apiSuccess {string}     title                                  Title of a question
+ * @apiSuccess {object[]}   body                                   Body of a question
+ * @apiSuccess {object}     author                                 Author of a question
+ * @apiSuccess {string}     author.username                        Question's author's username
+ * @apiSuccess {string}     author.email                           Question's author's email
+ * @apiSuccess {string}     author.displayName                     Question's author's display name
+ * @apiSuccess {number}     author.profile                         Question's author's profile
+ * @apiSuccess {number}     author.profile.karma                   Question's author's karma
+ * @apiSuccess {object[]}   answers                                Answers to question
+ * @apiSuccess {bool}       answers.correct                        Is answer marked as correct
+ * @apiSuccess {date}       answers.timestamp                      Date and time of an answer
+ * @apiSuccess {number}     answers.score                          Score of an answer
+ * @apiSuccess {object}     answers.author                         Author of a answer
+ * @apiSuccess {string}     answers.author.username                Answer's author's username
+ * @apiSuccess {string}     answers.author.email                   Answer's author's email
+ * @apiSuccess {string}     answers.author.displayName             Answer's author's display name
+ * @apiSuccess {number}     answers.author.profile                 Answer's author's profile
+ * @apiSuccess {number}     answers.author.profile.karma           Answer's author's karma
+ * @apiSuccess {object[]}   subscribers                            Users subscribed to question
+ * @apiSuccess {string}     subscribers.username                   Subscriber's username
+ * @apiSuccess {string}     subscribers.email                      Subscriber's email
+ * @apiSuccess {string}     subscribers.displayName                Subscriber's display name
+ * @apiSuccess {number}     subscribers.profile                    Subscriber's profile
+ * @apiSuccess {number}     subscribers.profile.karma              Subscriber's karma
+ * @apiSuccess {date}       timestamp                              Date and time when question was asked
+ * @apiSuccess {string[]}   tags                                   Tags assigned to question
  */
-router.get('/', function(req, res){
+
+/**
+ * @apiName GetAllQuestions
+ * @api {get} /api/questions/
+ * @apiDescription Get all questions
+ * @apiGroup Questions
+ * @apiUse QuestionSuccess
+ */
+router.get('/', function(req, res, next){
   domain.Question
     .find()
     .select('id title body answers.author answers.timestamp answers.correct subscribers tags timestamp author')
@@ -25,16 +61,18 @@ router.get('/', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting questions', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
- * Get suggested questions
+ * @apiName GetSuggestedQuestions
+ * @api {get} /api/questions/suggested
+ * @apiDescription Get a list of suggested questions
+ * @apiGroup Questions
+ * @apiUse QuestionSuccess
  */
-router.get('/suggested', function(req, res){
+router.get('/suggested', function(req, res, next){
   domain.User
     .findByIdQ(req.user.id)
     .then(function(user){
@@ -51,17 +89,19 @@ router.get('/suggested', function(req, res){
         })
         .catch(function(error){
           logger.error('Error getting questions', error);
-          res
-            .status(500)
-            .send();
+          return next(error);
         });
     });
 });
 
 /**
- * Get most wanted questions
+ * @apiName GetMostWantedQuestions
+ * @api {get} /api/questions/most-wanted
+ * @apiDescription Get a list of most wanted(subscribed) questions
+ * @apiGroup Questions
+ * @apiUse QuestionSuccess
  */
-router.get('/most-wanted', function(req, res){
+router.get('/most-wanted', function(req, res, next){
   domain.Question
     .aggregate([{
         $match:{ 'answers.correct': {$ne: true}}},{
@@ -100,18 +140,21 @@ router.get('/most-wanted', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting questions', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
- * Get all questions by user
+ * @apiName GetAllQuestionsForUser
+ * @api {get} /api/questions/profile/:username
+ * @apiParam {string} username User's username
+ * @apiDescription Get a list of questions asked by user
+ * @apiGroup Questions
+ * @apiUse QuestionSuccess
  */
-router.get('/profile/:id', function(req, res){
+router.get('/profile/:username', function(req, res, next){
   domain.User
-    .findByIdQ(req.params.id)
+    .findOneQ({username:req.params.username})
     .then(function(user){
       return user.populateQ('profile.asked', 'id title body answers.author answers.timestamp answers.correct subscribers tags timestamp')
         .then(function(user){
@@ -122,9 +165,7 @@ router.get('/profile/:id', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting questions', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
@@ -132,7 +173,7 @@ router.get('/profile/:id', function(req, res){
 /**
  * Get question by id
  */
-router.get('/:id', function(req, res){
+router.get('/:id', function(req, res, next){
   domain.Question.findByIdQ(req.params.id)
     .then(function(question){
       return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
@@ -147,38 +188,14 @@ router.get('/:id', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting answer', error);
-      res
-        .status(500)
-        .send();
-    });
-});
-
-/**
- * Subscribe to question
- */
-router.put('/:id/subscribe', function(req, res){
-  domain.Question.findByIdQ(req.params.id)
-    .then(function(question){
-      question.subscribers.push(req.user.id);
-      return question.saveQ();
-    })
-    .then(function(question){
-      res
-        .status(200)
-        .send(question);
-    })
-    .catch(function(error){
-      logger.error('Error getting answer', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
  * Fulltext search for questions
  */
-router.get('/search/:term', function(req, res){
+router.get('/search/:term', function(req, res, next){
   domain.Question
     .find(
         { $text : { $search : req.params.term } },
@@ -194,16 +211,14 @@ router.get('/search/:term', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting questions', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
  * Get questions by tag
  */
-router.get('/tag/:tag', function(req, res){
+router.get('/tag/:tag', function(req, res, next){
   domain.Question
     .find(
       { tags : req.params.tag }
@@ -216,15 +231,9 @@ router.get('/tag/:tag', function(req, res){
     })
     .catch(function(error){
       logger.error('Error getting questions by tag', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
-
-/**
- * Add answer
- */
 
 function updateUserQuestionsFeed(user, question, message){
   return user.populateQ('feed', 'questionNotifications')
@@ -241,7 +250,10 @@ function updateUserQuestionsFeed(user, question, message){
     });
 }
 
-router.post('/:questionId/answer', function(req, res){
+/**
+ * Add answer
+ */
+router.post('/:questionId/answer', validate({body: schemas.addOrEditAnswerSchema}), function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
     .then(function (question){
       var answer = new domain.Answer({
@@ -254,6 +266,12 @@ router.post('/:questionId/answer', function(req, res){
       return question.saveQ();
     })
     .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
+    })
+    .then(function(question){
       return domain.User.findByIdQ(req.user.id)
       .then(function(user){
         user.profile.answered.push(question.id);
@@ -263,6 +281,7 @@ router.post('/:questionId/answer', function(req, res){
         res
           .status(200)
           .send(question);
+
 
         question.populateQ('subscribers', 'feed')
           .then(function(questionPop){
@@ -281,15 +300,13 @@ router.post('/:questionId/answer', function(req, res){
     })
     .catch(function(error){
       logger.error('Error posting answer', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 
 /* Add comment for question */
-router.post('/:questionId/comment', function(req, res){
+router.post('/:questionId/comment', validate({body: schemas.addOrEditCommentSchema}), function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
   .then(function(question) {
     question.comments.push({
@@ -297,6 +314,12 @@ router.post('/:questionId/comment', function(req, res){
       body: req.body.body
     });
     return question.saveQ();
+  })
+  .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+  .then(function(question){
+    return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
   })
   .then(function(question){
       return domain.User.findByIdQ(req.user.id)
@@ -324,15 +347,13 @@ router.post('/:questionId/comment', function(req, res){
     })
     .catch(function(error){
       logger.error('Error posting comment', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 
 /* Add comment for answer */
-router.post('/:questionId/answer/:answerId/comment', function(req, res){
+router.post('/:questionId/answer/:answerId/comment', validate({body: schemas.addOrEditCommentSchema}), function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
     .then(function (question){
       var answer = question.answers.id(req.params.answerId);
@@ -351,22 +372,26 @@ router.post('/:questionId/answer/:answerId/comment', function(req, res){
       return question.saveQ();
     })
     .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
+    })
+    .then(function(question){
       res
         .status(200)
         .send(question);
     })
     .catch(function(error){
       logger.error('Error adding comment', error, error.errors);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
  * Mark answer as correct
  */
-router.put('/:questionId/answer/:answerId/correct', function(req, res){
+router.put('/:questionId/answer/:answerId/correct', function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
     .then(function (question){
       return question.populateQ('answers.author', 'username displayName email profile.karmaChanges feed')
@@ -389,22 +414,26 @@ router.put('/:questionId/answer/:answerId/correct', function(req, res){
         });
     })
     .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
+    })
+    .then(function(question){
       res
         .status(200)
         .send(question);
     })
     .catch(function(error){
       logger.error('Error marking answer as correct', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
  * Upvote answer
  */
-router.put('/:questionId/answer/:answerId/upvote', function(req, res){
+router.put('/:questionId/answer/:answerId/upvote', function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
     .then(function (question){
       var answer = question.answers.id(req.params.answerId);
@@ -413,9 +442,15 @@ router.put('/:questionId/answer/:answerId/upvote', function(req, res){
         answer.downVotes.splice(downVoteIndex, 1);
       }
       else if (answer.upVotes.indexOf(req.user.id) === -1){
-        answer.upVotes.push(req.user.id);//TODO: Review that
+        answer.upVotes.push(req.user.id);
       }
       return question.saveQ();
+    })
+    .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
     })
     .then(function(question){
       res
@@ -424,16 +459,14 @@ router.put('/:questionId/answer/:answerId/upvote', function(req, res){
     })
     .catch(function(error){
       logger.error('Error upvoting an answer', error);
-      res
-        .status(500)
-        .send();
+      return next(error);
     });
 });
 
 /**
  * Downvote answer
  */
-router.put('/:questionId/answer/:answerId/downvote', function(req, res){
+router.put('/:questionId/answer/:answerId/downvote', function(req, res, next){
   domain.Question.findByIdQ(req.params.questionId)
     .then(function (question){
       var answer = question.answers.id(req.params.answerId);
@@ -447,22 +480,52 @@ router.put('/:questionId/answer/:answerId/downvote', function(req, res){
       return question.saveQ();
     })
     .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
+    })
+    .then(function(question){
       res
         .status(200)
         .send(question);
     })
     .catch(function(error){
       logger.error('Error upvoting an answer', error);
+      return next(error);
+    });
+});
+
+/**
+ * Subscribe to question
+ */
+router.put('/:id/subscribe', function(req, res, next){
+  domain.Question.findByIdQ(req.params.id)
+    .then(function(question){
+      question.subscribers.push(req.user.id);
+      return question.saveQ();
+    })
+    .then(function(question){
+      return question.populateQ('author subscribers upVotes downVotes', 'username displayName email');
+    })
+    .then(function(question){
+      return question.populateQ('answers.author comments.author answers.comments.author', 'username displayName email');
+    })
+    .then(function(question){
       res
-        .status(500)
-        .send();
+        .status(200)
+        .send(question);
+    })
+    .catch(function(error){
+      logger.error('Error getting answer', error);
+      return next(error);
     });
 });
 
 /**
  * Add question
  */
-router.post('/', function(req, res){
+router.post('/', validate({body: schemas.addOrEditQuestionSchema}), function(req, res, next){
   var question = new domain.Question(_.extend(req.body, {author: req.user.id}));
   question.subscribers.push(req.user.id);
 
@@ -478,6 +541,7 @@ router.post('/', function(req, res){
         res
           .status(200)
           .send(question);
+
         question.populateQ('proposedPeople', 'feed')
           .then(function(questionPop){
             questionPop.proposedPeople.forEach(function(prop){
@@ -488,9 +552,7 @@ router.post('/', function(req, res){
     })
     .catch(function(error){
       logger.error('Error posting question', error, error.errors);
-      res
-        .status(500)
-        .send();
+      next(error);
     });
 });
 

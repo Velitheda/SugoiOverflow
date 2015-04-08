@@ -1,3 +1,6 @@
+/**
+  * @namespace sugoiOverflow
+  */
 angular
 	.module('sugoiOverflow',
 		['ngRoute',
@@ -9,65 +12,27 @@ angular
     'wiz.markdown',
     'ngTagsInput',
     'pageslide-directive',
+    'sugoiOverflow.templates',
 		'sugoiOverflow.settings',
-    'sugoiOverflow.services',
-		'sugoiOverflow.controllers',
+    'sugoiOverflow.shared',
 		'sugoiOverflow.interceptors',
-    'sugoiOverflow.filters'
+    'sugoiOverflow.questions',
+    'sugoiOverflow.profile',
+    'sugoiOverflow.auth'
 		])
 	.config(function($httpProvider, $routeProvider){
 		'use strict';
 
 		$routeProvider
-      .when('/login', {
-        templateUrl: 'views/auth/login.html',
-        controller: 'loginController'
-      })
-      .when('/register', {
-        templateUrl: 'views/auth/register.html',
-        controller: 'registerController'
-      })
-      .when('/questions/new/', {
-        templateUrl: 'views/questions/newQuestion.html',
-        controller: 'newQuestionController'
-      })
-      .when('/questions/search/:searchTerms', {
-        templateUrl: 'views/questions/questions.html',
-        controller: 'questionsController'
-      })
-      .when('/questions/:questionFilter?', {
-        templateUrl: 'views/questions/questions.html',
-        controller: 'questionsController'
-      })
-      .when('/questions/:id/answers', {
-        templateUrl: 'views/questions/answerQuestion.html',
-        controller: 'answersController'
-      })
-      .when('/profile', {
-        redirectTo: '/profile/me'
-      })
-      .when('/profile/me', {
-        templateUrl: 'views/profile/viewProfile.html',
-        controller: 'viewProfileController'
-      })
-      .when('/profile/me/edit', {
-        templateUrl: 'views/profile/editProfile.html',
-        controller: 'editProfileController'
-      })
-      .when('/profile/:username', {
-        templateUrl: 'views/profile/viewProfile.html',
-        controller: 'viewProfileController'
-      })
-      .when('/logout', {
-        template: '',
-        controller: function($location, authService){
-          authService.logout()
-            .then(function(){
-              $location.path('/login');
-            });
-        }
-      })
       .otherwise({
         redirectTo: '/questions/suggested'
       });
-	});
+	})
+  .run(function($rootScope, $location, currentUser) {
+    'use strict';
+    $rootScope.$on( '$routeChangeStart', function(event, next) {
+      if (!currentUser.isAuthenticated && next.isSecured) {
+        $location.path( '/login' );
+      }
+    });
+ });
